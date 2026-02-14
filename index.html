@@ -1,0 +1,616 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>エターナル・クリスタル 〜覚醒の章〜</title>
+<style>
+    @import url('https://fonts.googleapis.com/css2?family=DotGothic16&display=swap');
+
+    :root { --bg-color: #111; --win-bg: rgba(0,0,20,0.95); --win-border: #fff; }
+
+    body {
+        background: var(--bg-color); margin: 0; height: 100vh; width: 100vw; overflow: hidden;
+        font-family: 'DotGothic16', sans-serif; color: white;
+        display: flex; justify-content: center; align-items: center; touch-action: none;
+        user-select: none; -webkit-user-select: none;
+    }
+
+    #game-wrapper {
+        position: relative; width: 100%; height: 100%; max-width: 800px;
+        display: flex; justify-content: center; align-items: center; background: #000; overflow: hidden;
+    }
+
+    canvas { display: block; image-rendering: pixelated; max-width: 100%; max-height: 100%; }
+
+    /* ウィンドウ共通 */
+    .rpg-window {
+        background: var(--win-bg); border: 3px solid var(--win-border); border-radius: 4px;
+        box-shadow: inset 0 0 0 2px #000, 4px 4px 0 rgba(0,0,0,0.5); padding: 10px; z-index: 10;
+    }
+    .btn {
+        background: transparent; border: 2px solid #fff; color: #fff; font-family: inherit; font-size: 18px;
+        padding: 8px 15px; cursor: pointer; transition: 0.2s;
+    }
+    .btn:active { background: #fff; color: #000; }
+    .btn:disabled { border-color: #555; color: #555; pointer-events: none; }
+
+    /* タイトル・職業選択 */
+    #title-screen {
+        position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: #000;
+        display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 100;
+    }
+    .title-logo { font-size: 40px; color: #ffeb3b; text-shadow: 3px 3px #f00; margin-bottom: 40px; text-align: center; }
+    .job-cards { display: flex; gap: 20px; }
+    .job-card {
+        width: 140px; display: flex; flex-direction: column; align-items: center; gap: 10px;
+        cursor: pointer;
+    }
+    .job-card:hover { transform: translateY(-5px); border-color: #ffeb3b; }
+
+    /* UI Layer */
+    #ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; display: none; }
+    .status-bar { position: absolute; top: 10px; left: 10px; display: flex; gap: 15px; font-size: 18px; }
+    .menu-btn { position: absolute; top: 10px; right: 10px; pointer-events: auto; }
+
+    /* メッセージボックス */
+    .msg-box {
+        position: absolute; bottom: 170px; left: 50%; transform: translateX(-50%);
+        width: 85%; min-height: 60px; font-size: 20px; line-height: 1.5; display: none;
+        white-space: pre-wrap; pointer-events: auto;
+    }
+    .choices { display: flex; gap: 10px; justify-content: flex-end; margin-top: 10px; }
+
+    /* バトル画面 */
+    #battle-screen {
+        position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+        background: rgba(0,0,0,0.9); display: none; flex-direction: column;
+        justify-content: center; align-items: center; pointer-events: auto; z-index: 50;
+    }
+    #enemy-sprite { transform: scale(4); margin-bottom: 30px; }
+    #enemy-name { font-size: 26px; color: #f55; margin-bottom: 20px; }
+    #battle-msg { width: 80%; height: 80px; margin-bottom: 20px; font-size: 20px; text-align: center; }
+    .battle-commands { display: flex; gap: 15px; flex-wrap: wrap; justify-content: center; max-width: 90%; }
+
+    /* コントローラー */
+    #controls-layer {
+        position: absolute; bottom: 20px; left: 20px; right: 20px; height: 140px;
+        pointer-events: auto; display: flex; justify-content: space-between; align-items: flex-end; z-index: 20; display: none;
+    }
+    #joystick-zone { position: relative; width: 130px; height: 130px; background: rgba(255,255,255,0.1); border-radius: 50%; border: 2px solid rgba(255,255,255,0.3); touch-action: none; }
+    #joystick-knob { position: absolute; top: 50%; left: 50%; width: 50px; height: 50px; background: rgba(255,255,255,0.6); border-radius: 50%; transform: translate(-50%, -50%); pointer-events: none; }
+    .action-btn { width: 80px; height: 80px; background: rgba(255,50,50,0.5); border: 3px solid rgba(255,100,100,0.8); border-radius: 50%; display: flex; justify-content: center; align-items: center; font-size: 24px; font-weight: bold; margin-bottom: 5px; margin-right: 10px; }
+    .action-btn:active { transform: scale(0.95); }
+
+    #fade-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: black; opacity: 0; pointer-events: none; transition: opacity 0.5s; z-index: 100; }
+</style>
+</head>
+<body>
+
+<div id="game-wrapper">
+    <div id="title-screen">
+        <div class="title-logo">エターナル・クリスタル<br><span style="font-size:24px; color:#fff;">〜覚醒の章〜</span></div>
+        <p>職業を選択して冒険を始めよう</p>
+        <div class="job-cards">
+            <div class="rpg-window job-card" onclick="startGame('warrior')">
+                <h3 style="color:#f55; margin:0;">戦士</h3>
+                <span style="font-size:14px; text-align:center;">HPと攻撃力が高い<br>魔法は使えない<br>専用技: 会心斬り</span>
+            </div>
+            <div class="rpg-window job-card" onclick="startGame('mage')">
+                <h3 style="color:#5cf; margin:0;">魔法使い</h3>
+                <span style="font-size:14px; text-align:center;">MPが豊富<br>強力な攻撃魔法<br>専用魔法: ファイア</span>
+            </div>
+            <div class="rpg-window job-card" onclick="startGame('hero')">
+                <h3 style="color:#5f5; margin:0;">勇者</h3>
+                <span style="font-size:14px; text-align:center;">攻守のバランス型<br>回復魔法が使える<br>専用魔法: ホイミ</span>
+            </div>
+        </div>
+    </div>
+
+    <canvas id="gameCanvas" width="800" height="600"></canvas>
+    
+    <div id="ui-layer">
+        <div class="rpg-window status-bar">
+            <span>LV <span id="ui-lv">1</span></span>
+            <span>HP <span id="ui-hp">20</span></span>
+            <span>MP <span id="ui-mp">10</span></span>
+            <span style="color:gold;">G <span id="ui-gold">0</span></span>
+        </div>
+        <button class="rpg-window menu-btn btn" onclick="toggleStatus()">STATUS</button>
+
+        <div id="msg-box" class="rpg-window msg-box">
+            <div id="msg-text"></div>
+            <div id="msg-choices" class="choices"></div>
+        </div>
+
+        <div id="status-modal" class="rpg-window" style="position:absolute; top:15%; left:50%; transform:translateX(-50%); width:300px; display:none; flex-direction:column; gap:10px; pointer-events:auto;">
+            <h2 style="margin:0; text-align:center; color:#4df;" id="st-jobname">ステータス</h2>
+            <div style="display:flex; justify-content:space-between;"><span>LV</span><span id="st-lv">1</span></div>
+            <div style="display:flex; justify-content:space-between;"><span>HP</span><span id="st-hp">20/20</span></div>
+            <div style="display:flex; justify-content:space-between;"><span>MP</span><span id="st-mp">10/10</span></div>
+            <div style="display:flex; justify-content:space-between;"><span>ATK</span><span id="st-atk">5</span></div>
+            <div style="display:flex; justify-content:space-between;"><span>DEF</span><span id="st-def">2</span></div>
+            <div style="display:flex; justify-content:space-between;"><span>EXP</span><span id="st-exp">0 / 10</span></div>
+            <div style="color:#ffa; font-size:16px;">装備: <span id="st-wpn">ひのきのぼう</span></div>
+            <button class="btn" style="width:100%; margin-top:10px;" onclick="toggleStatus()">閉じる</button>
+        </div>
+    </div>
+
+    <div id="battle-screen">
+        <h2 id="enemy-name">スライム</h2>
+        <canvas id="enemy-sprite" width="48" height="48"></canvas>
+        <div id="battle-msg" class="rpg-window"></div>
+        <div class="battle-commands" id="battle-cmds">
+            </div>
+    </div>
+
+    <div id="controls-layer">
+        <div id="joystick-zone"><div id="joystick-knob"></div></div>
+        <div class="action-btn" onpointerdown="input.setAction()" onpointerup="input.stopAction()">A</div>
+    </div>
+    <div id="fade-layer"></div>
+</div>
+
+<script>
+/* エターナル・クリスタル 〜覚醒の章〜 */
+
+const CFG = { TILE_SIZE: 48, SCREEN_W: 800, SCREEN_H: 600, SPEED: 5, ENCOUNTER_RATE: 0.015 };
+
+const T = {
+    GRASS: { id: 0, walk: true }, MOUNTAIN: { id: 1, walk: false }, WATER: { id: 2, walk: false }, TREES: { id: 3, walk: true },
+    FLOOR: { id: 4, walk: true }, WALL: { id: 5, walk: false },
+    TOWN:  { id: 10, walk: true }, CAVE:  { id: 11, walk: true }, EXIT:  { id: 12, walk: true },
+    NPC:   { id: 20, walk: false }, INN: { id: 21, walk: false }, SHOP: { id: 22, walk: false }, // 村の施設
+    CHEST: { id: 23, walk: false }, BOSS:  { id: 24, walk: false }
+};
+
+const JOBS = {
+    warrior: { name: '戦士', hp: 35, mp: 0, atk: 8, def: 5, color: '#f55', skills: [{id:'atk', name:'たたかう', mp:0}, {id:'smash', name:'会心斬り', mp:0}] },
+    mage: { name: '魔法使い', hp: 15, mp: 30, atk: 3, def: 2, color: '#5cf', skills: [{id:'atk', name:'たたかう', mp:0}, {id:'fire', name:'ファイア', mp:4}, {id:'heal', name:'ヒール', mp:5}] },
+    hero: { name: '勇者', hp: 25, mp: 15, atk: 6, def: 4, color: '#5f5', skills: [{id:'atk', name:'たたかう', mp:0}, {id:'heal', name:'ホイミ', mp:3}, {id:'slash', name:'全力斬り', mp:2}] }
+};
+
+const Sprites = {};
+function createPixelSprite(key, w, h, pal, data) {
+    const c = document.createElement('canvas'); c.width = w * 4; c.height = h * 4;
+    const ctx = c.getContext('2d');
+    for(let y=0; y<h; y++) for(let x=0; x<w; x++) if(data[y][x]!=='0') { ctx.fillStyle = pal[parseInt(data[y][x], 16)]; ctx.fillRect(x*4, y*4, 4, 4); }
+    Sprites[key] = c;
+}
+
+function initGraphics() {
+    const pal = [null,'#111','#fca','#25e','#5af','#642','#fff','#e33','#4a4','#888','#fe3','#939','#262','#f88','#55f'];
+    // プレイヤー(ベース)
+    createPixelSprite('player', 12, 12, pal, ["000000000000","000011110000","000111111000","000122221000","000212212000","000222222000","000333333000","003733337300","003733337300","000333333000","000330033000","005550055500"]);
+    // NPCs
+    createPixelSprite('npc', 12, 12, pal, ["000000000000","000066660000","000666666000","000622226000","000212212000","000666666000","000888888000","008888888800","008888888800","000888888000","000880088000","005550055500"]);
+    createPixelSprite('inn', 12, 12, pal, ["000000000000","0000A66A0000","000A2222A000","00A212212A00","00A222222A00","000DDDDDD000","000DDDDDD000","000DDDDDD000","000DDDDDD000","000DDDDDD000","000DD00DD000","005550055500"]); // 宿屋娘(ピンク)
+    createPixelSprite('shop', 12, 12, pal, ["000000000000","000055550000","000522225000","005212212500","005225522500","000E5555E000","000E5555E000","00EE5555EE00","000E5555E000","000EE00EE000","000110011000","000110011000"]); // 武器屋(青服)
+    // マップ
+    createPixelSprite('grass',12,12,pal,["888888888888","8C88888C8888","888C888888C8","888888888888","88C88888C888","888888888888","8888C8888888","8C88888C8888","8888888888C8","888C88888888","88888888C888","8C888C888888"]);
+    createPixelSprite('trees',12,12,pal,["0000C0000000","000CCC000000","00CCCCC00000","0CCCCCCC0000","000CCC000000","00CCCCC00000","0CCCCCCC0000","CCCCCCCCC000","000C5C000000","000C5C000000","000000000000","000000000000"]);
+    createPixelSprite('mountain',12,12,pal,["000009000000","000096900000","000966690000","009666669000","099966699900","095999995900","955599955590","955559555559","955555555559","955555555559","955555555559","999999999999"]);
+    createPixelSprite('water',12,12,pal,["444444444444","446444444444","444444644444","444444444464","444464444444","464444444444","444444446444","444464444444","444444444444","446444446444","444444444444","444444644444"]);
+    createPixelSprite('floor',12,12,pal,["999999999999","991199911999","919919199199","991199911999","999999999999","991199911999","919919199199","991199911999","999999999999","991199911999","919919199199","991199911999"]);
+    createPixelSprite('wall',12,12,pal,["111111111111","199919999991","199919999991","111111111111","199999919991","199999919991","111111111111","199919999991","199919999991","111111111111","111111111111","111111111111"]);
+    // アイコン・敵
+    createPixelSprite('town',12,12,pal,["000000000000","000777770000","007777777000","077777777700","076666666700","076616166700","076666666700","076655566700","076651566700","076651566700","077777777700","000000000000"]);
+    createPixelSprite('cave',12,12,pal,["999999999999","999999999999","999911199999","999111119999","991111111999","991111111999","991111111999","991111111999","991111111999","991111111999","999111119999","999999999999"]);
+    createPixelSprite('chest',12,12,pal,["000000000000","000000000000","001111111100","01AA5555AA10","1A55555555A1","155551155551","15551AA15551","155551155551","155555555551","111111111111","000000000000","000000000000"]);
+    createPixelSprite('slime',12,12,pal,["000000000000","000000000000","000003000000","000033300000","000333330000","003363633000","033313133300","033333333300","033333333300","033333333300","003333333300","000000000000"]);
+    createPixelSprite('bat',12,12,pal,["000000000000","010000000100","111001001110","1A1111111A10","011A111A1100","001111111000","000110110000","001100011000","000000000000","000000000000","000000000000","000000000000"]);
+    createPixelSprite('boss',12,12,pal,["000B0000B000","000BB00BB000","00BBB00BBB00","0BBBBBBBBBB0","0BB71BB17BB0","0BBBBBBBBBB0","00BBBAABBB00","00BBBBBBBB00","000BBBBBB000","000BB00BB000","00BB0000BB00","000000000000"]);
+}
+
+// --- ステート ---
+const state = {
+    mapId: 'village', job: null, wpnName: 'ひのきのぼう',
+    p: { x:0, y:0, dir:2, moving:false, anim:0, lv:1, hp:0, maxHp:0, mp:0, maxMp:0, atk:0, def:0, gold:0, exp:0, nextExp:10 },
+    cam: { x:0, y:0 }, msgActive: false, battleActive: false
+};
+const maps = { village:{w:12,h:10,data:[]}, world:{w:30,h:30,data:[]}, dungeon:{w:15,h:15,data:[]} };
+
+function startGame(jobId) {
+    state.job = JOBS[jobId];
+    Object.assign(state.p, state.job); // 職業ステータスをコピー
+    state.p.maxHp = state.p.hp; state.p.maxMp = state.p.mp;
+    
+    document.getElementById('title-screen').style.display = 'none';
+    document.getElementById('ui-layer').style.display = 'block';
+    document.getElementById('controls-layer').style.display = 'flex';
+    document.getElementById('st-jobname').innerText = state.job.name;
+    
+    // バトルコマンド生成
+    const cmdBox = document.getElementById('battle-cmds');
+    cmdBox.innerHTML = '';
+    state.job.skills.forEach(sk => {
+        let btn = document.createElement('button');
+        btn.className = 'rpg-window btn';
+        btn.innerText = `${sk.name}` + (sk.mp>0 ? ` (MP${sk.mp})` : '');
+        btn.onclick = () => battleAction(sk);
+        cmdBox.appendChild(btn);
+    });
+    // にげるボタン
+    let runBtn = document.createElement('button'); runBtn.className = 'rpg-window btn'; runBtn.innerText = 'にげる';
+    runBtn.onclick = () => battleAction({id:'run'});
+    cmdBox.appendChild(runBtn);
+
+    generateMaps();
+    updateUI();
+    showMsg(`【${state.job.name}】として旅に出た！\n村の施設で準備をして、\n北東の魔王の洞窟を目指そう！`);
+}
+
+function generateMaps() {
+    // 1. 村
+    for(let y=0; y<10; y++) {
+        let row = [];
+        for(let x=0; x<12; x++) {
+            if(x===0||x===11||y===0||y===9) row.push(T.TREES.id); else row.push(T.GRASS.id);
+        }
+        maps.village.data.push(row);
+    }
+    maps.village.data[9][5] = maps.village.data[9][6] = T.EXIT.id;
+    maps.village.data[3][3] = T.INN.id; // 宿屋
+    maps.village.data[3][8] = T.SHOP.id; // 武器屋
+    maps.village.data[5][5] = T.NPC.id; // 村長
+
+    // 2. ワールド
+    for(let y=0; y<30; y++) {
+        let row = [];
+        for(let x=0; x<30; x++) {
+            let id = T.GRASS.id;
+            if(x<2||x>27||y<2||y>27) id = T.MOUNTAIN.id;
+            else if(Math.random()<0.1) id = T.TREES.id; else if(Math.random()<0.05) id = T.MOUNTAIN.id;
+            row.push(id);
+        }
+        maps.world.data.push(row);
+    }
+    maps.world.data[15][15] = T.TOWN.id; maps.world.data[16][15] = T.GRASS.id;
+    maps.world.data[5][24] = T.CAVE.id; maps.world.data[6][24] = T.GRASS.id;
+
+    // 3. ダンジョン
+    for(let y=0; y<15; y++) {
+        let row = [];
+        for(let x=0; x<15; x++) {
+            if(x===0||x===14||y===0||y===14) row.push(T.WALL.id); else row.push(T.FLOOR.id);
+        }
+        maps.dungeon.data.push(row);
+    }
+    maps.dungeon.data[14][7] = T.EXIT.id;
+    for(let i=2; i<12; i+=2) { maps.dungeon.data[5][i] = T.WALL.id; maps.dungeon.data[9][i+1] = T.WALL.id; }
+    maps.dungeon.data[2][7] = T.BOSS.id; maps.dungeon.data[2][12] = T.CHEST.id;
+
+    state.p.x = 5 * CFG.TILE_SIZE; state.p.y = 6 * CFG.TILE_SIZE;
+}
+
+const input = {
+    dir: -1, action: false,
+    setDir: function(d) { if(!state.msgActive && !state.battleActive) this.dir = d; },
+    stopDir: function() { this.dir = -1; },
+    setAction: function() { 
+        if(state.battleActive) return;
+        if(state.msgActive) { closeMsg(); return; }
+        this.action = true; 
+    },
+    stopAction: function() { this.action = false; }
+};
+
+// ジョイスティック
+const joy = {
+    z: document.getElementById('joystick-zone'), k: document.getElementById('joystick-knob'), act: false, ox: 0, oy: 0,
+    init: function() {
+        this.z.addEventListener('pointerdown', e => { this.act = true; this.ox = e.clientX; this.oy = e.clientY; this.k.style.transition = 'none'; this.z.setPointerCapture(e.pointerId); });
+        this.z.addEventListener('pointermove', e => {
+            if(!this.act) return;
+            const dx = e.clientX - this.ox, dy = e.clientY - this.oy;
+            const dist = Math.sqrt(dx*dx + dy*dy);
+            const mx = dist > 40 ? (dx/dist)*40 : dx, my = dist > 40 ? (dy/dist)*40 : dy;
+            this.k.style.transform = `translate(calc(-50% + ${mx}px), calc(-50% + ${my}px))`;
+            if(dist > 15) {
+                const a = Math.atan2(dy, dx) * 180 / Math.PI;
+                if(a >= -45 && a < 45) input.setDir(1); else if(a >= 45 && a < 135) input.setDir(2);
+                else if(a >= -135 && a < -45) input.setDir(0); else input.setDir(3);
+            } else input.stopDir();
+        });
+        const stop = () => { this.act = false; this.k.style.transition = '0.2s'; this.k.style.transform = 'translate(-50%, -50%)'; input.stopDir(); };
+        this.z.addEventListener('pointerup', stop); this.z.addEventListener('pointercancel', stop);
+    }
+};
+joy.init();
+
+window.addEventListener('keydown', e => {
+    if(e.key==='ArrowUp') input.setDir(0); if(e.key==='ArrowDown') input.setDir(2);
+    if(e.key==='ArrowLeft') input.setDir(3); if(e.key==='ArrowRight') input.setDir(1);
+    if(e.key==='z' || e.key==='Enter') input.setAction();
+});
+window.addEventListener('keyup', e => { if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key)) input.stopDir(); if(e.key==='z' || e.key==='Enter') input.stopAction(); });
+
+function updateUI() {
+    document.getElementById('ui-lv').innerText = state.p.lv;
+    document.getElementById('ui-hp').innerText = state.p.hp;
+    document.getElementById('ui-mp').innerText = state.p.mp;
+    document.getElementById('ui-gold').innerText = state.p.gold;
+}
+
+function toggleStatus() {
+    const m = document.getElementById('status-modal');
+    if (m.style.display === 'flex') m.style.display = 'none';
+    else {
+        document.getElementById('st-lv').innerText = state.p.lv;
+        document.getElementById('st-hp').innerText = state.p.hp + '/' + state.p.maxHp;
+        document.getElementById('st-mp').innerText = state.p.mp + '/' + state.p.maxMp;
+        document.getElementById('st-atk').innerText = state.p.atk;
+        document.getElementById('st-def').innerText = state.p.def;
+        document.getElementById('st-exp').innerText = state.p.exp + ' / ' + state.p.nextExp;
+        document.getElementById('st-wpn').innerText = state.wpnName;
+        m.style.display = 'flex';
+    }
+}
+
+// 選択肢付きメッセージ対応
+let msgCallback = null;
+function showMsg(text, choices = null) {
+    document.getElementById('msg-text').innerText = text;
+    const cbox = document.getElementById('msg-choices');
+    cbox.innerHTML = '';
+    
+    if(choices) {
+        choices.forEach(c => {
+            let btn = document.createElement('button');
+            btn.className = 'btn'; btn.innerText = c.text;
+            btn.onclick = (e) => { e.stopPropagation(); closeMsg(); c.cb(); };
+            cbox.appendChild(btn);
+        });
+    } else {
+        msgCallback = null; // 通常閉じる
+    }
+    
+    document.getElementById('msg-box').style.display = 'block';
+    state.msgActive = true; input.stopDir();
+}
+function closeMsg() {
+    if(!state.msgActive || document.getElementById('msg-choices').innerHTML !== '') return; // 選択肢表示中はタップで閉じない
+    document.getElementById('msg-box').style.display = 'none';
+    state.msgActive = false; input.action = false;
+    if(msgCallback) { let cb = msgCallback; msgCallback = null; cb(); }
+}
+
+function levelUp() {
+    state.p.lv++;
+    state.p.maxHp += Math.floor(state.job.hp * 0.2);
+    state.p.maxMp += Math.floor(state.job.mp * 0.2);
+    state.p.hp = state.p.maxHp; state.p.mp = state.p.maxMp;
+    state.p.atk += 2; state.p.def += 1;
+    state.p.nextExp = Math.floor(state.p.nextExp * 1.5);
+    updateUI();
+    showMsg(`レベルアップ！ Lv${state.p.lv} になった！\nHP/MPが全回復した！`);
+}
+
+function fadeTransition(cb) {
+    const fade = document.getElementById('fade-layer'); fade.style.opacity = 1;
+    setTimeout(() => { cb(); updateUI(); fade.style.opacity = 0; }, 500);
+}
+
+function checkEvents() {
+    const map = maps[state.mapId];
+    const tx = Math.floor((state.p.x + 24) / CFG.TILE_SIZE), ty = Math.floor((state.p.y + 36) / CFG.TILE_SIZE);
+    if(map.data[ty] !== undefined) {
+        const id = map.data[ty][tx];
+        if(id === T.TOWN.id) fadeTransition(() => { state.mapId = 'village'; state.p.x = 5*48; state.p.y = 8*48; });
+        else if(id === T.CAVE.id) fadeTransition(() => { state.mapId = 'dungeon'; state.p.x = 7*48; state.p.y = 13*48; });
+        else if(id === T.EXIT.id) {
+            if(state.mapId === 'village') fadeTransition(() => { state.mapId = 'world'; state.p.x = 15*48; state.p.y = 16*48; });
+            if(state.mapId === 'dungeon') fadeTransition(() => { state.mapId = 'world'; state.p.x = 5*48; state.p.y = 7*48; });
+        }
+    }
+}
+
+function interact() {
+    const p = state.p;
+    let tx = Math.floor((p.x + 24) / CFG.TILE_SIZE), ty = Math.floor((p.y + 24) / CFG.TILE_SIZE);
+    if(p.dir===0) ty--; else if(p.dir===2) ty++; else if(p.dir===3) tx--; else if(p.dir===1) tx++;
+    const map = maps[state.mapId];
+    if(ty<0||ty>=map.h||tx<0||tx>=map.w) return;
+    
+    const id = map.data[ty][tx];
+    
+    if(id === T.NPC.id) {
+        showMsg("世界から光が奪われた……。\n魔王を倒し『星の結晶』を取り戻してくれ！");
+    } else if(id === T.INN.id) {
+        showMsg("宿屋へようこそ。\n10GでHPとMPを全回復しますか？", [
+            { text: 'はい', cb: () => {
+                if(p.gold >= 10) { p.gold -= 10; p.hp = p.maxHp; p.mp = p.maxMp; updateUI(); showMsg("一晩休んで、すっかり元気になった！"); }
+                else showMsg("お金が足りないようですね。");
+            }},
+            { text: 'いいえ', cb: () => { showMsg("またどうぞ。"); } }
+        ]);
+    } else if(id === T.SHOP.id) {
+        showMsg("武器屋だぜ。\n50Gで『鋼の剣』に買い替えるかい？", [
+            { text: '買う', cb: () => {
+                if(state.wpnName === '鋼の剣') showMsg("もう持ってるぜ。");
+                else if(p.gold >= 50) { p.gold -= 50; state.wpnName = '鋼の剣'; p.atk += 5; updateUI(); showMsg("まいどあり！ 攻撃力が5上がったぜ！"); }
+                else showMsg("お金が足りないな。出直してきな。");
+            }},
+            { text: 'やめる', cb: () => { showMsg("またな。"); } }
+        ]);
+    } else if(id === T.CHEST.id) {
+        showMsg("宝箱をあけた！\n100G を手に入れた！"); p.gold += 100; updateUI(); map.data[ty][tx] = T.FLOOR.id;
+    } else if(id === T.BOSS.id) {
+        showMsg("グハハハ！我は魔王！\n星の結晶は渡さぬ！死ぬがよい！", null);
+        setTimeout(()=> { closeMsg(); startBattle({ name: '魔王', hp: 120, maxHp: 120, atk: 15, def: 5, exp: 500, gold: 500, sprite: 'boss', isBoss: true }); }, 2000);
+    }
+}
+
+// --- バトル ---
+let curEnemy = null;
+function startRandomEncounter() {
+    if(state.mapId === 'village') return;
+    let e = { sprite: 'slime' };
+    if(state.mapId === 'world') { e.name = 'スライム'; e.hp = 15; e.maxHp=15; e.atk = 7; e.def = 2; e.exp = 4; e.gold = 5; }
+    else { e.name = 'ダークバット'; e.hp = 30; e.maxHp=30; e.atk = 12; e.def = 4; e.exp = 10; e.gold = 15; e.sprite = 'bat'; }
+    startBattle(e);
+}
+
+function startBattle(enemy) {
+    input.stopDir(); state.battleActive = true; curEnemy = enemy;
+    document.getElementById('battle-screen').style.display = 'flex';
+    document.getElementById('enemy-name').innerText = `${enemy.name} があらわれた！`;
+    const c = document.getElementById('enemy-sprite'), ctx = c.getContext('2d');
+    ctx.clearRect(0,0,c.width,c.height); ctx.drawImage(Sprites[enemy.sprite], 0, 0, 48, 48);
+    setBattleMsg("どうする？");
+}
+
+function setBattleMsg(txt) { document.getElementById('battle-msg').innerText = txt; }
+function toggleBattleBtns(enable) { document.querySelectorAll('#battle-cmds .btn').forEach(b => b.disabled = !enable); }
+
+function battleAction(cmd) {
+    if(!state.battleActive) return;
+    toggleBattleBtns(false);
+
+    if(cmd.id === 'run') {
+        if(curEnemy.isBoss) { setBattleMsg("魔王からは逃げられない！"); setTimeout(enemyTurn, 1500); }
+        else { setBattleMsg("うまく逃げ切った！"); setTimeout(endBattle, 1000); }
+        return;
+    }
+
+    // MPチェック
+    if(state.p.mp < cmd.mp) { setBattleMsg("MPが足りない！"); setTimeout(()=>toggleBattleBtns(true), 1000); return; }
+    state.p.mp -= cmd.mp; updateUI();
+
+    let dmg = 0, msg = "";
+    
+    // スキル効果処理
+    if(cmd.id === 'atk') {
+        dmg = Math.max(1, state.p.atk - curEnemy.def + Math.floor(Math.random()*3));
+        msg = `${state.p.job.name}の攻撃！\n${dmg} のダメージを与えた！`;
+    } else if(cmd.id === 'smash' || cmd.id === 'slash') {
+        // MP0で時々ミス、MP消費で確実などアレンジ。今回は確定大ダメージ
+        dmg = Math.max(1, (state.p.atk * 1.5) - curEnemy.def + Math.floor(Math.random()*5));
+        msg = `${cmd.name}！！\n${dmg} の大ダメージを与えた！`;
+    } else if(cmd.id === 'fire') {
+        dmg = 20 + Math.floor(Math.random()*5); // 固定ダメージ系
+        msg = `炎の魔法！\n${dmg} のダメージを与えた！`;
+    } else if(cmd.id === 'heal') {
+        const h = 25; state.p.hp = Math.min(state.p.maxHp, state.p.hp + h); updateUI();
+        setBattleMsg(`回復魔法！ HPが ${h} 回復した！`);
+        setTimeout(enemyTurn, 1500); return;
+    }
+
+    curEnemy.hp -= dmg;
+    const scr = document.getElementById('battle-screen');
+    scr.style.transform = 'translate(10px, 10px)'; setTimeout(()=> scr.style.transform = 'translate(-10px, -10px)', 50); setTimeout(()=> scr.style.transform = 'translate(0, 0)', 100);
+    setBattleMsg(msg);
+
+    if(curEnemy.hp <= 0) {
+        setTimeout(() => {
+            setBattleMsg(`${curEnemy.name} を倒した！\n${curEnemy.exp} EXP と ${curEnemy.gold} G を得た！`);
+            state.p.exp += curEnemy.exp; state.p.gold += curEnemy.gold; updateUI();
+            
+            if(curEnemy.isBoss) {
+                const map = maps[state.mapId]; map.data[2][7] = T.FLOOR.id;
+                setTimeout(() => { showMsg("魔王を打ち倒した！\n世界に光が戻る……。\n〜 GAME CLEAR 〜"); endBattle(); }, 2000);
+            } else {
+                setTimeout(() => { if(state.p.exp >= state.p.nextExp) { levelUp(); setTimeout(endBattle, 2000); } else endBattle(); }, 2000);
+            }
+        }, 1500);
+    } else {
+        setTimeout(enemyTurn, 1500);
+    }
+}
+
+function enemyTurn() {
+    let dmg = Math.max(1, curEnemy.atk - state.p.def + Math.floor(Math.random()*3));
+    state.p.hp -= dmg; updateUI();
+    const wrp = document.getElementById('game-wrapper');
+    wrp.style.transform = 'translate(5px, 0)'; setTimeout(()=> wrp.style.transform = 'translate(-5px, 0)', 50); setTimeout(()=> wrp.style.transform = 'translate(0, 0)', 100);
+    
+    setBattleMsg(`${curEnemy.name} の攻撃！\n${dmg} のダメージを受けた！`);
+    if(state.p.hp <= 0) {
+        setTimeout(() => {
+            setBattleMsg("勇者は死んでしまった……。");
+            setTimeout(() => {
+                state.p.hp = state.p.maxHp; state.p.mp = state.p.maxMp; state.p.gold = Math.floor(state.p.gold / 2);
+                endBattle(); fadeTransition(() => { state.mapId = 'village'; state.p.x = 5*48; state.p.y = 8*48; });
+            }, 2000);
+        }, 1500);
+    } else setTimeout(() => { setBattleMsg("どうする？"); toggleBattleBtns(true); }, 1500);
+}
+function endBattle() { state.battleActive = false; document.getElementById('battle-screen').style.display = 'none'; toggleBattleBtns(true); }
+
+function update() {
+    if(state.msgActive || state.battleActive || !state.job) return;
+    if(document.getElementById('status-modal').style.display === 'flex') return;
+
+    const p = state.p; const map = maps[state.mapId];
+    let dx = 0, dy = 0;
+    if (input.dir !== -1) {
+        p.dir = input.dir;
+        if(p.dir === 0) dy = -CFG.SPEED; if(p.dir === 2) dy = CFG.SPEED;
+        if(p.dir === 3) dx = -CFG.SPEED; if(p.dir === 1) dx = CFG.SPEED;
+        p.moving = true;
+    } else { p.moving = false; p.anim = 0; }
+
+    if (dx !== 0 || dy !== 0) {
+        const nx = p.x + dx, ny = p.y + dy, ftX = nx + 16, ftR = nx + 32, ftY = ny + 24, ftB = ny + 46;
+        const check = (x, y) => {
+            let tx = Math.floor(x / CFG.TILE_SIZE), ty = Math.floor(y / CFG.TILE_SIZE);
+            if(tx<0||tx>=map.w||ty<0||ty>=map.h) return false;
+            return Object.values(T).find(t=>t.id===map.data[ty][tx]).walk;
+        };
+        if (check(ftX, ftY) && check(ftR, ftY) && check(ftX, ftB) && check(ftR, ftB)) {
+            p.x = nx; p.y = ny;
+            if(Math.floor(Date.now()/100)%2===0) p.anim = (p.anim === 0) ? 1 : 0;
+            if(state.mapId !== 'village' && Math.random() < CFG.ENCOUNTER_RATE) startRandomEncounter();
+        }
+    }
+
+    checkEvents();
+    if(input.action) { interact(); input.action = false; }
+
+    state.cam.x = Math.max(0, Math.min(p.x - CFG.SCREEN_W/2 + 24, map.w * CFG.TILE_SIZE - CFG.SCREEN_W));
+    state.cam.y = Math.max(0, Math.min(p.y - CFG.SCREEN_H/2 + 24, map.h * CFG.TILE_SIZE - CFG.SCREEN_H));
+    if(map.w * CFG.TILE_SIZE < CFG.SCREEN_W) state.cam.x = -(CFG.SCREEN_W - map.w * CFG.TILE_SIZE)/2;
+    if(map.h * CFG.TILE_SIZE < CFG.SCREEN_H) state.cam.y = -(CFG.SCREEN_H - map.h * CFG.TILE_SIZE)/2;
+}
+
+const ctx = document.getElementById('gameCanvas').getContext('2d');
+ctx.imageSmoothingEnabled = false;
+
+function draw() {
+    if(!state.job) return; // 職未決定時は描画しない
+    ctx.fillStyle = '#000'; ctx.fillRect(0,0,CFG.SCREEN_W, CFG.SCREEN_H);
+    const map = maps[state.mapId];
+    const sx = Math.max(0, Math.floor(state.cam.x / CFG.TILE_SIZE)); const ex = Math.min(map.w - 1, sx + (CFG.SCREEN_W / CFG.TILE_SIZE) + 1);
+    const sy = Math.max(0, Math.floor(state.cam.y / CFG.TILE_SIZE)); const ey = Math.min(map.h - 1, sy + (CFG.SCREEN_H / CFG.TILE_SIZE) + 1);
+
+    for(let y=sy; y<=ey; y++) {
+        for(let x=sx; x<=ex; x++) {
+            let id = map.data[y][x], px = x * CFG.TILE_SIZE - state.cam.x, py = y * CFG.TILE_SIZE - state.cam.y;
+            if(state.mapId === 'world') ctx.drawImage(Sprites.grass, px, py, 48, 48);
+            if(state.mapId === 'village') ctx.drawImage(Sprites.grass, px, py, 48, 48);
+            if(state.mapId === 'dungeon') ctx.drawImage(Sprites.floor, px, py, 48, 48);
+
+            if(id === T.MOUNTAIN.id) ctx.drawImage(Sprites.mountain, px, py, 48, 48);
+            if(id === T.TREES.id) ctx.drawImage(Sprites.trees, px, py, 48, 48);
+            if(id === T.WALL.id) ctx.drawImage(Sprites.wall, px, py, 48, 48);
+            if(id === T.TOWN.id) ctx.drawImage(Sprites.town, px, py, 48, 48);
+            if(id === T.CAVE.id) ctx.drawImage(Sprites.cave, px, py, 48, 48);
+            if(id === T.NPC.id) ctx.drawImage(Sprites.npc, px, py, 48, 48);
+            if(id === T.INN.id) ctx.drawImage(Sprites.inn, px, py, 48, 48);
+            if(id === T.SHOP.id) ctx.drawImage(Sprites.shop, px, py, 48, 48);
+            if(id === T.CHEST.id) ctx.drawImage(Sprites.chest, px, py, 48, 48);
+            if(id === T.BOSS.id) ctx.drawImage(Sprites.boss, px, py, 48, 48);
+            if(id === T.EXIT.id) { ctx.fillStyle = 'rgba(255,255,255,0.2)'; ctx.fillRect(px,py,48,48); }
+        }
+    }
+
+    const px = state.p.x - state.cam.x, py = state.p.y - state.cam.y, bob = state.p.anim === 1 ? -2 : 0;
+    ctx.fillStyle = 'rgba(0,0,0,0.4)'; ctx.beginPath(); ctx.ellipse(px+24, py+40, 16, 6, 0, 0, Math.PI*2); ctx.fill();
+    ctx.drawImage(Sprites.player, px, py+bob, 48, 48);
+}
+
+function loop() { update(); draw(); requestAnimationFrame(loop); }
+window.onload = function() { initGraphics(); loop(); };
+</script>
+</body>
+</html>
